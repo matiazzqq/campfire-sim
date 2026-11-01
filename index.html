@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PIXEL FOREST: Campfire Sim</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    background:#0a0a1a;
+    font-family:'Segoe UI',sans-serif;
+    overflow:hidden;
+    height:100vh;
+    width:100vw;
+    touch-action:none;
+    user-select:none;
+}
+canvas{display:block;cursor:pointer}
+
+#ui-layer{
+    position:absolute;top:0;left:0;width:100%;height:100%;
+    pointer-events:none;
+    display:flex;flex-direction:column;
+    justify-content:space-between;
+    padding:15px;
+}
+
+/* Верхняя панель ресурсов */
+.top-panel{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    gap:10px;flex-wrap:wrap;
+}
+.resource-box{
+    background:rgba(20,20,40,.7);
+    backdrop-filter:blur(5px);
+    border:1px solid rgba(255,180,80,.3);
+    padding:10px 18px;
+    border-radius:12px;
+    color:#ffd9a0;
+    font-weight:bold;font-size:18px;
+    display:flex;align-items:center;gap:8px;
+}
+.resource-box .val{color:#fff;font-size:22px}
+
+/* Полоска огня */
+.fire-meter-wrap{
+    width:min(400px,80vw);
+    margin:0 auto;
+    text-align:center;
+}
+.fire-label{color:#ffaa55;font-size:14px;font-weight:bold;margin-bottom:5px;text-shadow:0 0 10px rgba(255,150,50,.5)}
+.fire-meter{
+    width:100%;height:20px;
+    background:rgba(0,0,0,.5);
+    border:2px solid #ff8844;
+    border-radius:10px;
+    overflow:hidden;
+}
+.fire-fill{
+    height:100%;width:80%;
+    background:linear-gradient(90deg,#ff4400,#ff8800,#ffcc00);
+    border-radius:8px;
+    transition:width .3s;
+    box-shadow:0 0 15px rgba(255,136,0,.6);
+}
+
+/* Магазин улучшений */
+.shop-panel{
+    display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
+    pointer-events:auto;
+}
+.shop-btn{
+    background:rgba(20,20,40,.8);
+    border:2px solid rgba(255,180,80,.4);
+    border-radius:12px;
+    padding:10px 14px;
+    color:#ffd9a0;
+    cursor:pointer;
+    font-size:13px;font-weight:bold;
+    transition:all .2s;
+    min-width:110px;
+    text-align:center;
+}
+.shop-btn:hover{border-color:#ffcc66;background:rgba(60,40,20,.9);transform:translateY(-3px)}
+.shop-btn.cant{opacity:.4;cursor:not-allowed;transform:none}
+.shop-btn .cost{color:#ffcc66;display:block;margin-top:4px;font-size:12px}
+.shop-btn .lvl{color:#88ff88;font-size:11px}
+
+/* Меню */
+.menu-overlay{
+    position:absolute;inset:0;
+    background:rgba(5,5,15,.85);
+    backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    z-index:100;
+    transition:opacity .4s;
+    visibility:visible;opacity:1;
+    pointer-events:auto;
+}
+.hidden{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+h1{
+    font-size:min(11vw,55px);
+    color:#ffaa44;
+    text-shadow:0 0 30px rgba(255,150,50,.8);
+    letter-spacing:3px;margin-bottom:10px;
+}
+.subtitle{color:#ccaa88;font-size:17px;margin-bottom:30px;text-align:center;line-height:1.6;max-width:500px;padding:0 20px}
+.btn-play{
+    padding:16px 50px;font-size:22px;font-weight:bold;
+    color:#fff;
+    background:linear-gradient(45deg,#ff6600,#ffaa00);
+    border:none;border-radius:50px;
+    cursor:pointer;
+    box-shadow:0 10px 25px rgba(255,120,0,.4);
+    transition:transform .2s;
+    outline:none;
+}
+.btn-play:hover{transform:scale(1.08)}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui-layer">
+    <div class="top-panel">
+        <div class="resource-box">🪵 Дрова: <span class="val" id="woodVal">10</span></div>
+        <div class="fire-meter-wrap">
+            <div class="fire-label">🔥 УРОВЕНЬ ОГНЯ</div>
+            <div class="fire-meter"><div class="fire-fill" id="fireFill"></div></div>
+        </div>
+        <div class="resource-box">🍡 Зефир: <span class="val" id="mallowVal">0</span></div>
+    </div>
+
+    <div class="shop-panel">
+        <button class="shop-btn" id="upAuto">
+            🤖 Авто-дрова
+            <span class="lvl" id="upAutoLvl">ур. 0</span>
+            <span class="cost" id="upAutoCost">50 зефира</span>
+        </button>
+        <button class="shop-btn" id="upSlow">
+            🐌 Медленное затухание
+            <span class="lvl" id="upSlowLvl">ур. 0</span>
+            <span class="cost" id="upSlowCost">40 зефира</span>
+        </button>
+        <button class="shop-btn" id="upWood">
+            🪓 Больше дров за клик
+            <span class="lvl" id="upWoodLvl">ур. 0</span>
+            <span class="cost" id="upWoodCost">30 зефира</span>
+        </button>
+        <button class="shop-btn" id="upMallow">
+            🍡 Двойной зефир
+            <span class="lvl" id="upMallowLvl">ур. 0</span>
+            <span class="cost" id="upMallowCost">60 зефира</span>
+        </button>
+    </div>
+</div>
+
+<!-- START MENU -->
+<div id="startMenu" class="menu-overlay">
+    <h1>CAMPFIRE SIM</h1>
+    <p class="subtitle">
+        Уютная ночь в лесу. Поддерживай огонь, жарь зефир и лови светлячков.<br><br>
+        🪵 Кликай по брёвнам, чтобы собрать дрова.<br>
+        🔥 Кликай по костру, чтобы подкинуть дрова.<br>
+        🍡 Жарь зефир, когда огонь сильный!
+    </p>
+    <button class="btn-play" id="btnStart">РАЗЖЕЧЬ КОСТЁР 🔥</button>
+</div>
+
+<script>
+// === AUDIO ===
+let audioCtx = null;
+function initAudio(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+}
+function playSound(type){
+    if(!audioCtx) return;
+    const t = audioCtx.currentTime;
+    if(type==='add'){
+        // Треск дров
+        const bufSize = audioCtx.sampleRate*0.15;
+        const buf = audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+        const d = buf.getChannelData(0);
+        for(let i=0;i<bufSize;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,2);
+        const src=audioCtx.createBufferSource();src.buffer=buf;
+        const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=900;
+        const g=audioCtx.createGain();g.gain.value=0.25;
+        src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start();
+    } else if(type==='collect'){
+        const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+        o.type='sine';o.frequency.setValueAtTime(700,t);
+        o.frequency.exponentialRampToValueAtTime(1100,t+.08);
+        g.gain.setValueAtTime(.12,t);g.gain.linearRampToValueAtTime(0,t+.15);
+        o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(t+.15);
+    } else if(type==='mallow'){
+        [660,880,1100].forEach((f,i)=>{
+            const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+            o.type='sine';o.frequency.value=f;
+            g.gain.setValueAtTime(0,t+i*.08);
+            g.gain.linearRampToValueAtTime(.1,t+i*.08+.02);
+            g.gain.linearRampToValueAtTime(0,t+i*.08+.15);
+            o.connect(g);g.connect(audioCtx.destination);
+            o.start(t+i*.08);o.stop(t+i*.08+.2);
+        });
+    } else if(type==='upgrade'){
+        [440,550,660,880].forEach((f,i)=>{
+            const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+            o.type='triangle';o.frequency.value=f;
+            g.gain.setValueAtTime(0,t+i*.07);
+            g.gain.linearRampToValueAtTime(.12,t+i*.07+.02);
+            g.gain.linearRampToValueAtTime(0,t+i*.07+.12);
+            o.connect(g);g.connect(audioCtx.destination);
+            o.start(t+i*.07);o.stop(t+i*.07+.15);
+        });
+    } else if(type==='firefly'){
+        const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+        o.type='sine';o.frequency.setValueAtTime(1400,t);
+        o.frequency.exponentialRampToValueAtTime(1800,t+.1);
+        g.gain.setValueAtTime(.08,t);g.gain.linearRampToValueAtTime(0,t+.2);
+        o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(t+.2);
+    }
+}
+
+// === CANVAS SETUP ===
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W,H;
+
+function resize(){
+    W=window.innerWidth;H=window.innerHeight;
+    canvas.width=W;canvas.height=H;
+    // Пересчитываем позицию костра
+    fire.x=W/2;
+    fire.y=H*0.62;
+}
+window.addEventListener('resize',resize);
+
+// === GAME STATE ===
+const state = {
+    playing:false,
+    rafId:null,
+    wood:10,
+    mallows:0,
+    fireLevel:80, // 0-100
+    frame:0,
+    upgrades:{
+        auto:0,   // авто-дрова
+        slow:0,   // медленное затухание
+        wood:0,   // больше дров за клик
+        mallow:0  // двойной зефир
+    }
+};
+
+// === ОБЪЕКТЫ ===
+const fire={x:0,y:0,radius:60,particles:[],smoke:[]};
+let logs=[];      // брёвна для сбора
+let fireflies=[]; // светлячки
+let stars=[];     // звёзды
+let trees=[];     // силуэты деревьев
+let floats=[];    // всплывающий текст
+let marshTimer=0; // таймер жарки зефира
+let marshState=0; // 0-не жарится, 1-жарится, 2-готов
+let marshProgress=0;
+
+// Инициализация фона
+function initScenery(){
+    stars=[];trees=[];
+    for(let i=0;i<80;i++){
+        stars.push({
+            x:Math.random()*W,
+            y:Math.random()*H*0.5,
+            size:Math.random()*1.8+0.3,
+            twinkle:Math.random()*Math.PI*2,
+            speed:0.02+Math.random()*0.04
+        });
+    }
+    // Два слоя деревьев для параллакса
+    for(let layer=0;layer<2;layer++){
+        const count=layer===0?6:9;
+        for(let i=0;i<count;i++){
+            trees.push({
+                x:(W/count)*i+Math.random()*60,
+                h:80+Math.random()*100+(layer*40),
+                w:40+Math.random()*30,
+                layer
+            });
+        }
+    }
+}
+
+function spawnLog(){
+    if(logs.length>=4) return;
+    const side=Math.random()<0.5;
+    logs.push({
+        x:side?W*0.12+Math.random()*W*0.15:W*0.73+Math.random()*W*0.15,
+        y:H*0.75+Math.random()*H*0.12,
+        r:25,
+        wobble:Math.random()*Math.PI*2,
+        life:1
+    });
+}
+
+function spawnFirefly(){
+    if(fireflies.length>=6) return;
+    fireflies.push({
+        x:Math.random()*W,
+        y:H*0.3+Math.random()*H*0.4,
+        vx:(Math.random()-.5)*0.6,
+        vy:(Math.random()-.5)*0.4,
+        phase:Math.random()*Math.PI*2,
+        r:12
+    });
+}
+
+// === УЛУЧШЕНИЯ ===
+const upgradeCosts={
+    auto: lvl => 50+lvl*40,
+    slow: lvl => 40+lvl*30,
+    wood: lvl => 30+lvl*25,
+    mallow: lvl => 60+lvl*50
+};
+
+function buyUpgrade(key){
+    if(!state.playing) return;
+    const cost=upgradeCosts[key](state.upgrades[key]);
+    if(state.mallows>=cost){
+        state.mallows-=cost;
+        state.upgrades[key]++;
+        playSound('upgrade');
+        addFloat(W/2,H*0.3,'⬆ Улучшено!','#88ff88',24);
+        updateShopUI();
+        updateResources();
+    }
+}
+
+document.getElementById('upAuto').addEventListener('click',()=>buyUpgrade('auto'));
+document.getElementById('upSlow').addEventListener('click',()=>buyUpgrade('slow'));
+document.getElementById('upWood').addEventListener('click',()=>buyUpgrade('wood'));
+document.getElementById('upMallow').addEventListener('click',()=>buyUpgrade('mallow'));
+
+function updateShopUI(){
+    const ups=[
+        ['upAuto','auto'],['upSlow','slow'],['upWood','wood'],['upMallow','mallow']
+    ];
+    ups.forEach(([id,key])=>{
+        const lvl=state.upgrades[key];
+        const cost=upgradeCosts[key](lvl);
+        document.getElementById(id+'Lvl').innerText='ур. '+lvl;
+        document.getElementById(id+'Cost').innerText=cost+' зефира';
+        const btn=document.getElementById(id);
+        btn.classList.toggle('cant',state.mallows<cost);
+    });
+}
+
+function updateResources(){
+    document.getElementById('woodVal').innerText=state.wood;
+    document.getElementById('mallowVal').innerText=state.mallows;
+    document.getElementById('fireFill').style.width=state.fireLevel+'%';
+    updateShopUI();
+}
+
+function addFloat(x,y,text,color,size=18){
+    floats.push({x,y,text,color,size,life:1,vy:-1.2});
+}
+
+// === ЛОГИКА КЛИКОВ ===
+function handleClick(cx,cy){
+    if(!state.playing) return;
+
+    // 1. Клик по зефиру (жарим когда огонь > 50)
+    const marshX=fire.x+fire.radius+50;
+    const marshY=fire.y-20;
+    if(Math.hypot(cx-marshX,cy-marshY)<40){
+        if(state.fireLevel>50 && marshState===0){
+            marshState=1;
+            marshProgress=0;
+            addFloat(marshX,marshY-30,'Жарим...','#ffcc88');
+        } else if(marshState===2){
+            // Забираем готовый зефир
+            const gain=(state.upgrades.mallow+1);
+            state.mallows+=gain;
+            marshState=0;
+            marshProgress=0;
+            playSound('mallow');
+            addFloat(marshX,marshY-30,'+'+gain+' 🍡','#fff',22);
+            updateResources();
+        }
+        return;
+    }
+
+    // 2. Клик по светлячку
+    for(let i=fireflies.length-1;i>=0;i--){
+        const f=fireflies[i];
+        if(Math.hypot(cx-f.x,cy-f.y)<f.r+10){
+            state.mallows+=2;
+            playSound('firefly');
+            addFloat(f.x,f.y,'+2 ✨','#aaffaa',20);
+            fireflies.splice(i,1);
+            updateResources();
+            return;
+        }
+    }
+
+    // 3. Клик по бревну (собираем дрова)
+    for(let i=logs.length-1;i>=0;i--){
+        const l=logs[i];
+        if(Math.hypot(cx-l.x,cy-l.y)<l.r+8){
+            const gain=1+state.upgrades.wood;
+            state.wood+=gain;
+            playSound('collect');
+            addFloat(l.x,l.y,'+'+gain+' 🪵','#dda15e',20);
+            logs.splice(i,1);
+            updateResources();
+            return;
+        }
+    }
+
+    // 4. Клик по костру (подкидываем дрова)
+    if(Math.hypot(cx-fire.x,cy-fire.y)<fire.radius+25){
+        if(state.wood>0){
+            state.wood--;
+            const boost=8+state.upgrades.wood*2;
+            state.fireLevel=Math.min(100,state.fireLevel+boost);
+            playSound('add');
+            addFloat(fire.x,fire.y-fire.radius-10,'+'+boost+' 🔥','#ffaa44',20);
+            // Всплеск искр
+            for(let i=0;i<8;i++){
+                fire.particles.push({
+                    x:fire.x+(Math.random()-.5)*30,
+                    y:fire.y-10,
+                    vx:(Math.random()-.5)*2,
+                    vy:-2-Math.random()*3,
+                    life:1,
+                    size:2+Math.random()*3,
+                    color:'#ffcc44'
+                });
+            }
+            updateResources();
+        } else {
+            addFloat(fire.x,fire.y-fire.radius-10,'Нет дров!','#ff6666',18);
+        }
+        return;
+    }
+}
+
+canvas.addEventListener('mousedown',e=>handleClick(e.clientX,e.clientY));
+canvas.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    const t=e.touches[0];
+    handleClick(t.clientX,t.clientY);
+},{passive:false});
+
+// === ОБНОВЛЕНИЕ ===
+function update(){
+    state.frame++;
+
+    // Огонь затухает (медленнее с апгрейдом)
+    const decay=0.04*(1-state.upgrades.slow*0.15);
+    state.fireLevel=Math.max(0,state.fireLevel-decay);
+
+    // Авто-дрова
+    if(state.upgrades.auto>0 && state.frame%(300-state.upgrades.auto*40)===0){
+        if(state.wood>0){
+            state.wood--;
+            state.fireLevel=Math.min(100,state.fireLevel+6);
+            addFloat(fire.x,fire.y-fire.radius-30,'🤖 +6','#88ccff',14);
+        }
+    }
+
+    // Спавн брёвен
+    if(state.frame%180===0) spawnLog();
+    if(state.frame%240===0) spawnFirefly();
+
+    // Жарка зефира
+    if(marshState===1){
+        marshProgress+=0.008*(state.fireLevel/100+0.5);
+        if(marshProgress>=1){
+            marshState=2;
+            playSound('mallow');
+            addFloat(fire.x+fire.radius+50,fire.y-60,'Готово! 🍡','#ffee88',20);
+        }
+    }
+
+    // Частицы огня
+    if(state.fireLevel>5){
+        const intensity=state.fireLevel/100;
+        if(Math.random()<intensity){
+            fire.particles.push({
+                x:fire.x+(Math.random()-.5)*40*intensity,
+                y:fire.y,
+                vx:(Math.random()-.5)*1,
+                vy:-1-Math.random()*2*intensity,
+                life:1,
+                size:3+Math.random()*5*intensity,
+                color:Math.random()<0.5?'#ff6600':'#ffaa00'
+            });
+        }
+        // Дым
+        if(Math.random()<intensity*0.3){
+            fire.smoke.push({
+                x:fire.x+(Math.random()-.5)*20,
+                y:fire.y-30,
+                vx:(Math.random()-.5)*0.5,
+                vy:-0.5-Math.random()*0.5,
+                life:1,
+                size:8+Math.random()*8
+            });
+        }
+    }
+
+    // Обновление частиц огня
+    for(let i=fire.particles.length-1;i>=0;i--){
+        const p=fire.particles[i];
+        p.x+=p.vx;p.y+=p.vy;p.vy*=0.98;p.life-=0.03;
+        if(p.life<=0)fire.particles.splice(i,1);
+    }
+    // Дым
+    for(let i=fire.smoke.length-1;i>=0;i--){
+        const s=fire.smoke[i];
+        s.x+=s.vx;s.y+=s.vy;s.size+=0.15;s.life-=0.008;
+        if(s.life<=0)fire.smoke.splice(i,1);
+    }
+
+    // Светлячки
+    fireflies.forEach(f=>{
+        f.x+=f.vx;f.y+=f.vy;
+        f.phase+=0.05;
+        f.vx+=(Math.random()-.5)*0.1;
+        f.vy+=(Math.random()-.5)*0.1;
+        f.vx=Math.max(-1,Math.min(1,f.vx));
+        f.vy=Math.max(-0.8,Math.min(0.8,f.vy));
+        if(f.x<0||f.x>W)f.vx*=-1;
+        if(f.y<H*0.2||f.y>H*0.8)f.vy*=-1;
+    });
+
+    // Брёвна покачиваются
+    logs.forEach(l=>l.wobble+=0.03);
+
+    // Звёзды мерцают
+    stars.forEach(s=>s.twinkle+=s.speed);
+
+    // Всплывающий текст
+    for(let i=floats.length-1;i>=0;i--){
+        const f=floats[i];
+        f.y+=f.vy;f.life-=0.015;
+        if(f.life<=0)floats.splice(i,1);
+    }
+
+    // Обновляем UI периодически
+    if(state.frame%10===0)updateResources();
+}
+
+// === ОТРИСОВКА ===
+function draw(){
+    // Ночное небо градиентом
+    const sky=ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#0a0a2e');
+    sky.addColorStop(0.5,'#1a1a3e');
+    sky.addColorStop(1,'#2a1a2e');
+    ctx.fillStyle=sky;
+    ctx.fillRect(0,0,W,H);
+
+    // Луна
+    ctx.fillStyle='#fff8dc';
+    ctx.shadowBlur=40;ctx.shadowColor='#fffacd';
+    ctx.beginPath();
+    ctx.arc(W*0.8,H*0.15,35,0,Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur=0;
+    // Кратеры
+    ctx.fillStyle='rgba(200,190,150,.5)';
+    ctx.beginPath();ctx.arc(W*0.8-10,H*0.15-5,6,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(W*0.8+8,H*0.15+10,4,0,Math.PI*2);ctx.fill();
+
+    // Звёзды
+    stars.forEach(s=>{
+        const alpha=0.4+Math.abs(Math.sin(s.twinkle))*0.6;
+        ctx.globalAlpha=alpha;
+        ctx.fillStyle='#fff';
+        ctx.beginPath();
+        ctx.arc(s.x,s.y,s.size,0,Math.PI*2);
+        ctx.fill();
+    });
+    ctx.globalAlpha=1;
+
+    // Деревья (дальний слой)
+    trees.filter(t=>t.layer===0).forEach(t=>{
+        ctx.fillStyle='#0d1520';
+        drawTree(t.x,H*0.55,t.w,t.h);
+    });
+    // Деревья (ближний слой)
+    trees.filter(t=>t.layer===1).forEach(t=>{
+        ctx.fillStyle='#131f2e';
+        drawTree(t.x,H*0.62,t.w,t.h);
+    });
+
+    // Земля
+    ctx.fillStyle='#1a2818';
+    ctx.fillRect(0,H*0.68,W,H*0.32);
+    ctx.fillStyle='#223320';
+    ctx.fillRect(0,H*0.68,W,6);
+
+    // Свет от костра на земле
+    if(state.fireLevel>5){
+        const glow=ctx.createRadialGradient(fire.x,fire.y,10,fire.x,fire.y,fire.radius*3*(state.fireLevel/100+0.3));
+        glow.addColorStop(0,'rgba(255,150,50,'+(0.3*state.fireLevel/100)+')');
+        glow.addColorStop(1,'rgba(255,150,50,0)');
+        ctx.fillStyle=glow;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    // Дым
+    fire.smoke.forEach(s=>{
+        ctx.globalAlpha=s.life*0.3;
+        ctx.fillStyle='#888';
+        ctx.beginPath();
+        ctx.arc(s.x,s.y,s.size,0,Math.PI*2);
+        ctx.fill();
+    });
+    ctx.globalAlpha=1;
+
+    // Костёр: камни вокруг
+    ctx.fillStyle='#555';
+    for(let i=0;i<7;i++){
+        const a=(i/7)*Math.PI*2;
+        ctx.beginPath();
+        ctx.arc(fire.x+Math.cos(a)*45,fire.y+Math.sin(a)*20+15,8,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    // Дрова в костре
+    ctx.strokeStyle='#6b3410';
+    ctx.lineWidth=8;
+    ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(fire.x-25,fire.y+10);ctx.lineTo(fire.x+25,fire.y-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(fire.x-25,fire.y-5);ctx.lineTo(fire.x+25,fire.y+10);ctx.stroke();
+
+    // Частицы огня
+    fire.particles.forEach(p=>{
+        ctx.globalAlpha=p.life;
+        ctx.fillStyle=p.color;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);
+        ctx.fill();
+    });
+    ctx.globalAlpha=1;
+
+    // Ядро пламени (если огонь есть)
+    if(state.fireLevel>5){
+        const fh=(state.fireLevel/100)*50+10;
+        const flicker=Math.sin(state.frame*0.3)*4;
+        const grad=ctx.createRadialGradient(fire.x,fire.y,5,fire.x,fire.y-fh/2,fh);
+        grad.addColorStop(0,'#ffee88');
+        grad.addColorStop(0.5,'#ff8800');
+        grad.addColorStop(1,'rgba(255,80,0,0)');
+        ctx.fillStyle=grad;
+        ctx.beginPath();
+        ctx.ellipse(fire.x,fire.y-fh/2,25+flicker/2,fh,0,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    // Зефир на палочке
+    drawMarshmallow();
+
+    // Брёвна для сбора
+    logs.forEach(l=>{
+        const wy=Math.sin(l.wobble)*2;
+        ctx.save();
+        ctx.translate(l.x,l.y+wy);
+        ctx.rotate(Math.sin(l.wobble)*0.05);
+        ctx.fillStyle='#8b5a2b';
+        ctx.fillRect(-22,-10,44,20);
+        ctx.fillStyle='#a06a35';
+        ctx.beginPath();ctx.ellipse(-22,0,5,10,0,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#c9965f';
+        ctx.beginPath();ctx.ellipse(22,0,5,10,0,0,Math.PI*2);ctx.fill();
+        // Подсветка
+        ctx.strokeStyle='rgba(255,220,150,.6)';
+        ctx.lineWidth=2;
+        ctx.strokeRect(-22,-10,44,20);
+        ctx.restore();
+    });
+
+    // Светлячки
+    fireflies.forEach(f=>{
+        const glow=0.5+Math.sin(f.phase)*0.5;
+        ctx.shadowBlur=15;
+        ctx.shadowColor='#aaffaa';
+        ctx.fillStyle='rgba(180,255,150,'+(0.4+glow*0.6)+')';
+        ctx.beginPath();
+        ctx.arc(f.x,f.y,4,0,Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur=0;
+    });
+
+    // Всплывающий текст
+    floats.forEach(f=>{
+        ctx.globalAlpha=f.life;
+        ctx.fillStyle=f.color;
+        ctx.font='bold '+f.size+'px Segoe UI';
+        ctx.textAlign='center';
+        ctx.fillText(f.text,f.x,f.y);
+    });
+    ctx.globalAlpha=1;
+}
+
+function drawTree(x,baseY,w,h){
+    // Ствол
+    ctx.fillRect(x-w*0.08,baseY-h*0.3,w*0.16,h*0.3);
+    // Крона (треугольники)
+    for(let i=0;i<3;i++){
+        const ty=baseY-h*0.3-i*h*0.22;
+        const tw=w*(1-i*0.25);
+        ctx.beginPath();
+        ctx.moveTo(x-tw/2,ty);
+        ctx.lineTo(x+tw/2,ty);
+        ctx.lineTo(x,ty-h*0.35);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+function drawMarshmallow(){
+    const mx=fire.x+fire.radius+50;
+    const my=fire.y-20;
+
+    // Палочка
+    ctx.strokeStyle='#6b3410';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.moveTo(mx+30,my+40);
+    ctx.lineTo(mx,my);
+    ctx.stroke();
+
+    // Зефир
+    let color='#fff';
+    if(marshState===1){
+        const b=Math.floor(marshProgress*150);
+        color='rgb(255,'+(255-b)+','+(255-b*1.5)+')';
+    } else if(marshState===2){
+        color='#d4a056';
+        // Свечение готовности
+        ctx.shadowBlur=20;
+        ctx.shadowColor='#ffcc66';
+    }
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(mx-12,my-12,24,24,6) : ctx.rect(mx-12,my-12,24,24);
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    // Подпись
+    ctx.font='12px Segoe UI';
+    ctx.textAlign='center';
+    ctx.fillStyle='#ffdd99';
+    if(marshState===0){
+        ctx.fillText(state.fireLevel>50?'🍡 Жарить':'Нужен огонь >50%',mx,my-25);
+    } else if(marshState===1){
+        ctx.fillText('Жарится... '+Math.floor(marshProgress*100)+'%',mx,my-25);
+        // Прогресс-бар
+        ctx.fillStyle='rgba(0,0,0,.5)';
+        ctx.fillRect(mx-20,my-20,40,5);
+        ctx.fillStyle='#ffcc44';
+        ctx.fillRect(mx-20,my-20,40*marshProgress,5);
+    } else {
+        ctx.fillText('🍡 Забери!',mx,my-25);
+    }
+}
+
+// === ЦИКЛ ===
+function loop(){
+    if(!state.playing)return;
+    update();
+    draw();
+    state.rafId=requestAnimationFrame(loop);
+}
+
+function startGame(){
+    initAudio();
+    document.getElementById('btnStart').blur();
+    document.getElementById('startMenu').classList.add('hidden');
+
+    state.playing=true;
+    state.wood=10;
+    state.mallows=0;
+    state.fireLevel=80;
+    state.frame=0;
+    state.upgrades={auto:0,slow:0,wood:0,mallow:0};
+
+    logs=[];fireflies=[];floats=[];
+    fire.particles=[];fire.smoke=[];
+    marshState=0;marshProgress=0;
+
+    resize();
+    initScenery();
+    spawnLog();spawnLog();
+    spawnFirefly();spawnFirefly();
+    updateResources();
+
+    if(state.rafId)cancelAnimationFrame(state.rafId);
+    loop();
+}
+
+document.getElementById('btnStart').addEventListener('click',startGame);
+
+// Первичная отрисовка
+resize();
+initScenery();
+draw();
+</script>
+</body>
+</html>
